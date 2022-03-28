@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <time.h>
 // Debug
-#define DEBUG_ON
+#define DEBUG_OFF
 #define cudaErrChk(ans) { cudaAssert((ans), __FILE__, __LINE__); }
 inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=true);
 
@@ -14,9 +14,9 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
   ******************************************************************/
 
 #define DTYPE float
-const int M = 9;
-const int N = 9;
-const int K = 10;
+const int M = 16;
+const int N = 16;
+const int K = 17;
 const float sparsity = 0.1;
 const int warp_size = 4;
 
@@ -157,7 +157,7 @@ int main(void) {
     DTYPE *d_row_ptr, *d_col, *d_value;
     convert_to_CSR(d_A, (void**)&d_row_ptr, (void**)&d_col, (void**)&d_value);
 
-    #ifdef #DEBUG_ON
+    #ifdef DEBUG_ON
     check_csr(A, (void**)&d_row_ptr, (void**)&d_col, (void**)&d_value, M, K);
     #endif
 
@@ -182,12 +182,11 @@ int main(void) {
 /*******************************************************************
   * Host code
   ******************************************************************/
-DTYPE get_nonzero() {
-    while (true) {
-        DTYPE value = std::rand()%10-5;
-        if (value != 0)
-            return value;
-    }
+inline DTYPE get_nonzero() {
+    if (std::rand()%2 == 0)
+        return std::rand()%4+1;
+    else
+        return -1*(std::rand()%4+1);
 }
 
 void make_sparse_matrix(std::vector<DTYPE>& A) {
@@ -198,9 +197,13 @@ void make_sparse_matrix(std::vector<DTYPE>& A) {
     for (int i=0; i<M*K; i++) idx[i] = i;
 
     // Select matrix indices for nonzero value
-    while (idx.size() != total_nonzero) {
-        idx.erase(idx.begin() + std::rand()%idx.size());
-    }
+    for (int j=0; j<20; j++)
+        for (int i=0; i<total_nonzero; i++) {
+            int random_idx = std::rand()%idx.size();
+            DTYPE temp = idx[i];
+            idx[i] = idx[random_idx];
+            idx[random_idx] = temp;
+        }
 
     // Fill nonzero value into selected indices
     for (int i=0; i<total_nonzero; i++) {
@@ -245,8 +248,6 @@ void convert_to_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_val
     cudaErrChk( cudaMalloc(d_col_p, sizeof(int)*row_ptr[M]) );
     cudaErrChk( cudaMalloc(d_value_p, sizeof(DTYPE)*row_ptr[M]) );
     store_nonzero_by_row<DTYPE, warp_size><<<dim_blocks, dim_threads>>>(d_A, (int*)(*d_row_ptr_p), (int*)(*d_col_p), (DTYPE*)(*d_value_p), M, K);
-
-
 
     /*** End of conversion ***/
     cudaErrChk( cudaEventRecord(stop, NULL) );
@@ -295,8 +296,6 @@ void print_vector(const std::vector<T>& A) {
 void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** value_p, int ROW, int COL) {
 
 
-    print_matrix(A, ROW);
-
     std::vector<int> row_ptr(ROW+1);
     cudaErrChk( cudaMemcpy(row_ptr.data(),(*row_ptr_p), sizeof(int)*(M+1), cudaMemcpyDeviceToHost) );
 
@@ -310,10 +309,17 @@ void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** val
     cudaErrChk( cudaGetLastError() );
 
 
+    
+    print_matrix(A, ROW);
+    print_vector(row_ptr);
+    print_vector(col);
+    print_vector(value);
+    
+
     for (int r=0; r<ROW; r++) {
         for (int c=row_ptr[r]; c<row_ptr[r+1]; c++) {
             if (A[r*COL+col[c]] != value[c]){
-                printf("????\n");
+                printf("Error occurs!!\n");
                 return;
             }
             A[r*COL+col[c]] = 0;
@@ -322,15 +328,11 @@ void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** val
 
     for (int i=0; i<A.size(); i++) {
         if (A[i]!=0) {
-            printf("????\n");
+            printf("Error occurs!!\n");
             return;
         }            
     }
 
-    print_vector(row_ptr);
-    print_vector(col);
-    print_vector(value);
-    
 
     printf("No error!!\n");
 }
