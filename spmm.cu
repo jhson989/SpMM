@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <time.h>
 // Debug
-#define DEBUG_OFF
+#define DEBUG_ON
 #define cudaErrChk(ans) { cudaAssert((ans), __FILE__, __LINE__); }
 inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=true);
 
@@ -14,11 +14,11 @@ inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=
   ******************************************************************/
 
 #define DTYPE float
-const int M = 16;
-const int N = 16;
-const int K = 17;
-const float sparsity = 0.1;
-const int warp_size = 4;
+const int M = 1024*1+1;
+const int N = 1024*1+2;
+const int K = 1024*1+3;
+const float sparsity = 0.01;
+const int warp_size = 32;
 
 
 
@@ -104,15 +104,17 @@ __global__ void store_nonzero_by_row(T* A, int* row_ptr, int* col, T* value, int
   * Host code
   ******************************************************************/
 
-DTYPE get_random_number() {return std::rand()%10-5;}
+DTYPE get_random_number() {return std::rand()%11-5;}
 void make_sparse_matrix(std::vector<DTYPE>& A);
 void convert_to_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_value_p);
+void spmm_cpu(int* d_row_ptr, int* d_col, DTYPE* d_value, std::vector<DTYPE>& A, std::vector<DTYPE>& B, std::vector<DTYPE>& C);
 
 // for debug
 void print_matrix(const std::vector<DTYPE>& A, int ROW);
 template <typename T>
 void print_vector(const std::vector<T>& A);
 void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** value_p, int ROW, int COL) ;
+void check_result(std::vector<DTYPE>& A, std::vector<DTYPE>& B, std::vector<DTYPE>& C);
 
 
 /*******************************************************************
@@ -154,16 +156,16 @@ int main(void) {
     /*****************************
      * Conversion 
      *****************************/
-    DTYPE *d_row_ptr, *d_col, *d_value;
+    int *d_row_ptr, *d_col;
+    DTYPE *d_value;
     convert_to_CSR(d_A, (void**)&d_row_ptr, (void**)&d_col, (void**)&d_value);
 
-    #ifdef DEBUG_ON
-    check_csr(A, (void**)&d_row_ptr, (void**)&d_col, (void**)&d_value, M, K);
-    #endif
-
     /*****************************
-     * Kernel code
+     * Sparse - Dense Matrix Multiplication
      *****************************/
+    spmm_cpu(d_row_ptr, d_col, d_value, A, B, C);
+
+
 
 
 
@@ -259,6 +261,60 @@ void convert_to_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_val
 
 
 
+void spmm_cpu(int* d_row_ptr, int* d_col, DTYPE* d_value, std::vector<DTYPE>& A, std::vector<DTYPE>& B, std::vector<DTYPE>& C) {
+
+    printf("SpMM CPU version launched...\n");
+
+    std::vector<int> row_ptr(M+1);
+    cudaErrChk( cudaMemcpy(row_ptr.data(),d_row_ptr, sizeof(int)*(M+1), cudaMemcpyDeviceToHost) );
+
+    std::vector<int> col(row_ptr[M]);
+    cudaErrChk( cudaMemcpy(col.data(),d_col, sizeof(int)*(row_ptr[M]), cudaMemcpyDeviceToHost) );
+
+    std::vector<DTYPE> value(row_ptr[M]);
+    cudaErrChk( cudaMemcpy(value.data(),d_value, sizeof(DTYPE)*(row_ptr[M]), cudaMemcpyDeviceToHost) );
+
+    cudaErrChk( cudaDeviceSynchronize() );
+    cudaErrChk( cudaGetLastError() );
+
+    /*** Start of conversion ***/
+    float msec_total = 0.0f;
+    cudaEvent_t start, stop;
+    cudaErrChk( cudaEventCreate(&start) );
+    cudaErrChk( cudaEventCreate(&stop) );
+    cudaErrChk( cudaEventRecord(start, NULL) );
+
+    for (int y=0; y<M; y++) {
+        
+        for (int x=0; x<N; x++) {
+            DTYPE sum = 0;
+            for(int c=row_ptr[y]; c<row_ptr[y+1]; c++) {
+                int k = col[c];
+                DTYPE v = value[c];
+                sum += v*B[k*N+x];
+            }
+            C[y*N+x] = sum;
+        }
+        
+    }
+
+    /*** End of conversion ***/
+    cudaErrChk( cudaEventRecord(stop, NULL) );
+    cudaErrChk( cudaEventSynchronize(stop) );
+    cudaErrChk( cudaEventElapsedTime(&msec_total, start, stop) );
+    printf(" -- Elapsed time: %.3f s\n", msec_total*1e-3);
+
+
+    #ifdef DEBUG_ON
+    check_result(A, B, C);
+    #endif
+
+}
+
+
+
+
+
 
 /*******************************************************************
   * Debug code
@@ -319,7 +375,7 @@ void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** val
     for (int r=0; r<ROW; r++) {
         for (int c=row_ptr[r]; c<row_ptr[r+1]; c++) {
             if (A[r*COL+col[c]] != value[c]){
-                printf("Error occurs!!\n");
+                std::cout << " -- [[[ERR]]] Error occurs!!" << std::endl;
                 return;
             }
             A[r*COL+col[c]] = 0;
@@ -328,11 +384,26 @@ void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** val
 
     for (int i=0; i<A.size(); i++) {
         if (A[i]!=0) {
-            printf("Error occurs!!\n");
+            std::cout << " -- [[[ERR]]] Error occurs!!" << std::endl;
             return;
         }            
     }
+    std::cout << " -- No error!!" << std::endl;
+}
 
+void check_result(std::vector<DTYPE>& A, std::vector<DTYPE>& B, std::vector<DTYPE>& C) {
 
-    printf("No error!!\n");
+    for (int y=0; y<M; y++) {
+        for (int x=0; x<N; x++) {
+            DTYPE sum = 0;
+            for (int k=0; k<K; k++)
+                sum += (A[y*K+k]*B[k*N+x]);
+
+            if (C[y*N+x] != sum) {
+                std::cout << " -- [[[ERR]]] Error occurs!! : C["<<y<<","<<x<<"] = "<<C[y*N+x]<<" != gt("<<sum<<")" << std::endl;
+                return;      
+            }
+        }
+    }
+    std::cout << " -- No error!!" << std::endl;
 }
