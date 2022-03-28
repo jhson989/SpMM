@@ -1,2 +1,2 @@
-# Parallel Sparse Matrix Multiplication via SYCL
+# Parallel Sparse Matrix Multiplication via CUDA
 
