@@ -3,21 +3,25 @@
 #include <vector>
 #include <cstdlib>
 #include <algorithm>
+#include <time.h>
+// Debug
 #define DEBUG_ON
 #define cudaErrChk(ans) { cudaAssert((ans), __FILE__, __LINE__); }
 inline void cudaAssert(cudaError_t code, const char *file, int line, bool abort=true);
-
 
 /*******************************************************************
   * Matrix configuration
   ******************************************************************/
 
 #define DTYPE float
-const int M = 8;
-const int N = 8;
-const int K = 8;
-const float sparsity = 0.2;
-const int warp_size = 5;
+const int M = 9;
+const int N = 9;
+const int K = 10;
+const float sparsity = 0.1;
+const int warp_size = 4;
+
+
+
 
 /*******************************************************************
   * Kernel code
@@ -73,7 +77,6 @@ __global__ void store_nonzero_by_row(T* A, int* row_ptr, int* col, T* value, int
             #pragma unroll
             for (int w=0; w<WARP_SIZE; w++) {
                 if (svalue[w] != 0) {
-                    printf("[%d]%d %d : %f\n",row_ptr[y]+num, y, (w+i), svalue[w]);
                     col[row_ptr[y]+num] = (w+i);
                     value[row_ptr[y]+num] = svalue[w];
                     num++;
@@ -87,7 +90,6 @@ __global__ void store_nonzero_by_row(T* A, int* row_ptr, int* col, T* value, int
     if (x == 0) {
         for (int w=K_under; w<K; w++) {
             if (A[y*K+w] != 0){
-                printf("[%d]%d %d : %f\n", row_ptr[y]+num, y, w, A[y*K+w]);
                 col[row_ptr[y]+num] = w;
                 value[row_ptr[y]+num] = A[y*K+w];
                 num++;   
@@ -102,11 +104,15 @@ __global__ void store_nonzero_by_row(T* A, int* row_ptr, int* col, T* value, int
   * Host code
   ******************************************************************/
 
-void print_matrix(const std::vector<DTYPE>& A, int ROW);
-void print_vector(const std::vector<int>& A);
 DTYPE get_random_number() {return std::rand()%10-5;}
 void make_sparse_matrix(std::vector<DTYPE>& A);
-void conversion_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_value_p);
+void convert_to_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_value_p);
+
+// for debug
+void print_matrix(const std::vector<DTYPE>& A, int ROW);
+template <typename T>
+void print_vector(const std::vector<T>& A);
+void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** value_p, int ROW, int COL) ;
 
 
 /*******************************************************************
@@ -115,6 +121,7 @@ void conversion_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_val
 
 int main(void) {
 
+    srand(time(NULL));
     std::cout << "" << std::endl;
     std::cout << "==========================================================" << std::endl;
     std::cout << "Sparse Matrix Multipliation Example" << std::endl;
@@ -148,8 +155,11 @@ int main(void) {
      * Conversion 
      *****************************/
     DTYPE *d_row_ptr, *d_col, *d_value;
-    conversion_CSR(d_A, (void**)&d_row_ptr, (void**)&d_col, (void**)&d_value);
+    convert_to_CSR(d_A, (void**)&d_row_ptr, (void**)&d_col, (void**)&d_value);
 
+    #ifdef #DEBUG_ON
+    check_csr(A, (void**)&d_row_ptr, (void**)&d_col, (void**)&d_value, M, K);
+    #endif
 
     /*****************************
      * Kernel code
@@ -197,10 +207,9 @@ void make_sparse_matrix(std::vector<DTYPE>& A) {
         A[idx[i]] = get_nonzero();
     }
 
-    print_matrix(A, M);
 }
 
-void conversion_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_value_p) {
+void convert_to_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_value_p) {
 
     printf("CSR conversion launched...\n");
 
@@ -222,13 +231,12 @@ void conversion_CSR(DTYPE* d_A, void** d_row_ptr_p, void** d_col_p, void** d_val
     cudaErrChk( cudaMemcpy(row_ptr.data(),(*d_row_ptr_p), sizeof(int)*(M+1), cudaMemcpyDeviceToHost) );
     cudaErrChk( cudaDeviceSynchronize() );
     cudaErrChk( cudaGetLastError() );
-    print_vector(row_ptr);
 
     // Exclusive scan
     row_ptr[0] = 0;
     for (int i=1; i<(M+1); i++)
         row_ptr[i] += row_ptr[i-1];
-    print_vector(row_ptr);
+
     cudaErrChk( cudaMemcpy((*d_row_ptr_p), row_ptr.data(), sizeof(int)*(M+1), cudaMemcpyHostToDevice) );
     cudaErrChk( cudaDeviceSynchronize() );
     cudaErrChk( cudaGetLastError() );
@@ -275,10 +283,54 @@ void print_matrix(const std::vector<DTYPE>& A, int ROW) {
     std::cout << std::endl;
 }
 
-void print_vector(const std::vector<int>& A) {
+template <typename T>
+void print_vector(const std::vector<T>& A) {
 
     for (int i=0; i<A.size(); i++)
         std::cout << A[i] << " ";
 
     std::cout << std::endl << std::endl;
+}
+
+void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** value_p, int ROW, int COL) {
+
+
+    print_matrix(A, ROW);
+
+    std::vector<int> row_ptr(ROW+1);
+    cudaErrChk( cudaMemcpy(row_ptr.data(),(*row_ptr_p), sizeof(int)*(M+1), cudaMemcpyDeviceToHost) );
+
+    std::vector<int> col(row_ptr[ROW]);
+    cudaErrChk( cudaMemcpy(col.data(),(*col_p), sizeof(int)*(row_ptr[ROW]), cudaMemcpyDeviceToHost) );
+
+
+    std::vector<DTYPE> value(row_ptr[ROW]);
+    cudaErrChk( cudaMemcpy(value.data(),(*value_p), sizeof(DTYPE)*(row_ptr[ROW]), cudaMemcpyDeviceToHost) );
+    cudaErrChk( cudaDeviceSynchronize() );
+    cudaErrChk( cudaGetLastError() );
+
+
+    for (int r=0; r<ROW; r++) {
+        for (int c=row_ptr[r]; c<row_ptr[r+1]; c++) {
+            if (A[r*COL+col[c]] != value[c]){
+                printf("????\n");
+                return;
+            }
+            A[r*COL+col[c]] = 0;
+        }
+    }
+
+    for (int i=0; i<A.size(); i++) {
+        if (A[i]!=0) {
+            printf("????\n");
+            return;
+        }            
+    }
+
+    print_vector(row_ptr);
+    print_vector(col);
+    print_vector(value);
+    
+
+    printf("No error!!\n");
 }
