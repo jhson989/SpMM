@@ -24,6 +24,7 @@ void spmm_cpu(int* d_row_ptr, int* d_col, DTYPE* d_value, std::vector<DTYPE>& A,
     cudaErrChk( cudaEventCreate(&stop) );
     cudaErrChk( cudaEventRecord(start, NULL) );
 
+    #pragma omp parallel for num_threads(8)
     for (int y=0; y<M; y++) {
         
         for (int x=0; x<N; x++) {
