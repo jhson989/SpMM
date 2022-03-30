@@ -1,13 +1,13 @@
 #pragma once
 
-
-/*******************************************************************
+/********************************************************************************
   * Matrix configuration
-  ******************************************************************/
+  * C[M,N] = A[M,K]*B[K,N]
+  *******************************************************************************/
 
-#define DTYPE float
-const int M = 1024;
-const int N = 1024;
-const int K = 1024;
-const float SPARSITY = 0.01;
-const int WARP_SIZE = 32;
+#define DTYPE float // matrix data type
+const int M = 1024; // height of C and A
+const int N = 1024; // width of C and B
+const int K = 1024; // width of A and height of B
+const float SPARSITY = 0.01; // Sparsity : (the number of zero-valued elements) / (the total number of elements)
+const int WARP_SIZE = 32; // GPU warp size. It depends on GPU architecture

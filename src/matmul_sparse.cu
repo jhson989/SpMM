@@ -1,4 +1,4 @@
-#include "../include/matmul.cuh"
+#include "../include/matmul_sparse.cuh"
 
 
 void spmm_cpu(int* d_row_ptr, int* d_col, DTYPE* d_value, std::vector<DTYPE>& A, std::vector<DTYPE>& B, std::vector<DTYPE>& C) {
