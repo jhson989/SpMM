@@ -30,6 +30,7 @@ int main(void) {
     std::cout << "Sparse Matrix Multipliation Example" << std::endl;
     std::cout << "  -- Mutiplication of a sparse matrix and a dense matrix" << std::endl;
     std::cout << "  -- C["<<M<<","<<N<<"] = A["<<M<<","<<K<<"] * B["<<K<<","<<N<<"]" << std::endl;
+    std::cout << "  -- Total memory size: " << 1.0f*sizeof(DTYPE)*(M*K+K*N+M*N)*1e-9 << " GB" << std::endl;
     std::cout << "  -- Sparsity of matrix : " << SPARSITY << std::endl;
     std::cout << "==========================================================" << std::endl;
     std::cout << "" << std::endl;
