@@ -80,7 +80,8 @@ int main(void) {
     /* Run SpMM CPU implementation */
     spmm_cpu(d_row_ptr, d_col, d_value, A, B, C);
 
-
+    /* Run SpMM GPU implementation - 1 */
+    spmm_gpu_1(d_row_ptr, d_col, d_value, d_A, d_B, d_C, A, B, C);
 
     /*******************************************************************
      * Finalize

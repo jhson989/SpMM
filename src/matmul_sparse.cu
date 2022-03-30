@@ -17,7 +17,7 @@ void spmm_cpu(int* d_row_ptr, int* d_col, DTYPE* d_value, std::vector<DTYPE>& A,
     cudaErrChk( cudaDeviceSynchronize() );
     cudaErrChk( cudaGetLastError() );
 
-    /*** Start of conversion ***/
+    /*** Start of matmul ***/
     float msec_total = 0.0f;
     cudaEvent_t start, stop;
     cudaErrChk( cudaEventCreate(&start) );
@@ -38,11 +38,69 @@ void spmm_cpu(int* d_row_ptr, int* d_col, DTYPE* d_value, std::vector<DTYPE>& A,
         
     }
 
-    /*** End of conversion ***/
+    /*** End of matmul ***/
     cudaErrChk( cudaEventRecord(stop, NULL) );
     cudaErrChk( cudaEventSynchronize(stop) );
     cudaErrChk( cudaEventElapsedTime(&msec_total, start, stop) );
     printf(" -- Elapsed time: %.3f s\n", msec_total*1e-3);
+
+
+    #ifdef DEBUG_ON
+    check_result(A, B, C);
+    #endif
+
+}
+
+__global__ void kernel_1(int* row_ptr, int* col, DTYPE* value, DTYPE* B, DTYPE* C, const int M, const int N) {
+
+    int y = blockIdx.y * blockDim.y + threadIdx.y; // row
+    int x = blockIdx.x * blockDim.x + threadIdx.x; // column
+
+    if (y<M && x<N) {
+
+        DTYPE sum = 0;
+        for(int c=row_ptr[y]; c<row_ptr[y+1]; c++) {
+            int k = col[c];
+            DTYPE v = value[c];
+            sum += v*B[k*N+x];
+        }
+        C[y*N+x] = sum;
+
+    }
+    
+
+}
+
+
+void spmm_gpu_1(int* d_row_ptr, int* d_col, DTYPE* d_value, DTYPE* d_A, DTYPE* d_B, DTYPE* d_C, std::vector<DTYPE>& A, std::vector<DTYPE>& B, std::vector<DTYPE>& C) {
+
+    printf("SpMM GPU version-1 launched...\n");
+
+    const dim3 dim_threads(WARP_SIZE, WARP_SIZE);
+    const dim3 dim_blocks((N+WARP_SIZE-1)/WARP_SIZE, (N+WARP_SIZE-1)/WARP_SIZE);
+
+    /*** Start of matmul ***/
+    float msec_total = 0.0f;
+    cudaEvent_t start, stop;
+    cudaErrChk( cudaEventCreate(&start) );
+    cudaErrChk( cudaEventCreate(&stop) );
+    cudaErrChk( cudaEventRecord(start, NULL) );
+
+    // GPU kernel
+    kernel_1<<<dim_blocks, dim_threads>>>(d_row_ptr, d_col, d_value, d_B, d_C, M, N);
+    cudaErrChk( cudaDeviceSynchronize() );
+    cudaErrChk( cudaGetLastError() );
+    cudaErrChk( cudaMemcpy(C.data(), d_C, sizeof(DTYPE)*(M*N), cudaMemcpyDeviceToHost) );
+    cudaErrChk( cudaDeviceSynchronize() );
+    cudaErrChk( cudaGetLastError() );
+
+    /*** End of matmul ***/
+    cudaErrChk( cudaEventRecord(stop, NULL) );
+    cudaErrChk( cudaEventSynchronize(stop) );
+    cudaErrChk( cudaEventElapsedTime(&msec_total, start, stop) );
+    printf(" -- Elapsed time: %.3f s\n", msec_total*1e-3);
+
+
 
 
     #ifdef DEBUG_ON

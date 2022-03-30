@@ -45,7 +45,7 @@ void check_csr(std::vector<DTYPE>& A, void** row_ptr_p, void** col_p, void** val
             return;
         }            
     }
-    std::cout << " -- No error !!!" << std::endl;
+    std::cout << " -- Check correctness: no error !!!" << std::endl;
 }
 
 
@@ -64,5 +64,5 @@ void check_result(std::vector<DTYPE>& A, std::vector<DTYPE>& B, std::vector<DTYP
             }
         }
     }
-    std::cout << " -- No error !!!" << std::endl;
+    std::cout << " -- Check correctness: no error !!!" << std::endl;
 }

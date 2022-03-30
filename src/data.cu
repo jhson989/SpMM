@@ -2,12 +2,13 @@
 
 DTYPE get_random_number() {return std::rand()%11-5;}
 
-inline DTYPE get_nonzero() {
+inline DTYPE get_random_nonzero() {
     if (std::rand()%2 == 0)
         return std::rand()%4+1;
     else
         return -1*(std::rand()%4+1);
 }
+
 
 void make_sparse_matrix(std::vector<DTYPE>& A) {
 
@@ -27,7 +28,7 @@ void make_sparse_matrix(std::vector<DTYPE>& A) {
 
     // Fill nonzero value into selected indices
     for (int i=0; i<total_nonzero; i++) {
-        A[idx[i]] = get_nonzero();
+        A[idx[i]] = get_random_nonzero();
     }
 
 }
