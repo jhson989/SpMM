@@ -2,8 +2,8 @@ CC = nvcc
 PROJECT = spmm
 PROGRAM = ${PROJECT}.out
 MAIN = ${PROJECT}.cu 
-SRCS = src/debug.cu src/convert.cu src/data.cu
-INCS = include/config.cuh include/debug.cu include/convert.cuh include/data.cuh
+SRCS = src/debug.cu src/convert.cu src/data.cu src/matmul.cu
+INCS = include/config.cuh include/debug.cu include/convert.cuh include/data.cuh include/matmul.cuh
 DEBUG=OFF
 
 .PHONY : all run clean
