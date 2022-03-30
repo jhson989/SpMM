@@ -51,7 +51,7 @@ void spmm_cpu(int* d_row_ptr, int* d_col, DTYPE* d_value, std::vector<DTYPE>& A,
 
 }
 
-__global__ void kernel_1(int* row_ptr, int* col, DTYPE* value, DTYPE* B, DTYPE* C, const int M, const int N) {
+__global__ void sparse_matmul_1(int* row_ptr, int* col, DTYPE* value, DTYPE* B, DTYPE* C, const int M, const int N) {
 
     int y = blockIdx.y * blockDim.y + threadIdx.y; // row
     int x = blockIdx.x * blockDim.x + threadIdx.x; // column
@@ -87,9 +87,7 @@ void spmm_gpu_1(int* d_row_ptr, int* d_col, DTYPE* d_value, DTYPE* d_A, DTYPE* d
     cudaErrChk( cudaEventRecord(start, NULL) );
 
     // GPU kernel
-    kernel_1<<<dim_blocks, dim_threads>>>(d_row_ptr, d_col, d_value, d_B, d_C, M, N);
-    cudaErrChk( cudaDeviceSynchronize() );
-    cudaErrChk( cudaGetLastError() );
+    sparse_matmul_1<<<dim_blocks, dim_threads>>>(d_row_ptr, d_col, d_value, d_B, d_C, M, N);
     cudaErrChk( cudaMemcpy(C.data(), d_C, sizeof(DTYPE)*(M*N), cudaMemcpyDeviceToHost) );
     cudaErrChk( cudaDeviceSynchronize() );
     cudaErrChk( cudaGetLastError() );

@@ -14,6 +14,7 @@
 #include "include/data.cuh" // Sparse matrix generator
 #include "include/convert.cuh" // CSR convertor
 #include "include/matmul_sparse.cuh" // SpMM implementation
+#include "include/matmul_dense.cuh" // DeMM implementation
 
 
 
@@ -82,6 +83,11 @@ int main(void) {
 
     /* Run SpMM GPU implementation - 1 */
     spmm_gpu_1(d_row_ptr, d_col, d_value, d_A, d_B, d_C, A, B, C);
+
+    /* Run SpMM GPU implementation - 1 */
+    demm_gpu_1(d_A, d_B, d_C, A, B, C);
+
+
 
     /*******************************************************************
      * Finalize
